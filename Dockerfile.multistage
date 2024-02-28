@@ -2,7 +2,9 @@
 #  Multi-stage Dockerfile TrueProxy
 # =============================================================================
 #  Usage:
-#    docker build -t trueproxy:local . && docker run --rm trueproxy:local
+#    docker build -f Dockerfile.multistage -t trueproxy:local . && docker run -p 60201:62801 -p 60202:62802 --rm trueproxy:local
+#    docker tag trueproxy:local mrdjeb/trueproxy:latest
+#    docker push mrdjeb/trueproxy:latest
 # =============================================================================
 
 

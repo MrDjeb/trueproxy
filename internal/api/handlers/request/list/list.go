@@ -1,6 +1,7 @@
 package list
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -8,6 +9,7 @@ import (
 	resp "github.com/mrdjeb/trueproxy/internal/api/response"
 	"github.com/mrdjeb/trueproxy/internal/logger/sl"
 	"github.com/mrdjeb/trueproxy/internal/models"
+	"github.com/mrdjeb/trueproxy/internal/storage"
 )
 
 /*type RequestsRepo interface {
@@ -31,6 +33,12 @@ func New(log *slog.Logger, requestListGetter RequestListGetter) echo.HandlerFunc
 
 		requests, err := requestListGetter.ReadAllRequest()
 		if err != nil {
+			if errors.Is(err, storage.ErrRequestNotFound) {
+				log.Warn("request not found", sl.Err(err))
+
+				c.JSON(http.StatusBadRequest, resp.Err(err.Error()))
+				return err
+			}
 			log.Error("failed to requestListGetter", sl.Err(err))
 
 			c.JSON(http.StatusInternalServerError, resp.Err("internal error"))

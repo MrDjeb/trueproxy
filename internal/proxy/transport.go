@@ -1,12 +1,14 @@
 package proxy
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,20 +52,30 @@ func (rt proxyRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 
+	respDump := ParseResponse(resp)
+	if resp.Body != nil {
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			rt.log.Error("error ReadAll", sl.Err(err))
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			rt.log.Error("error resp.Body.Clos", sl.Err(err))
+		}
+		body := io.NopCloser(bytes.NewReader(b))
+		resp.Body = body
+		resp.ContentLength = int64(len(b))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(b)))
+		respDump.Body = string(b)
+	}
+
 	dumpResponse, err := httputil.DumpResponse(resp, true)
 	if err != nil {
 		rt.log.Error("error while dump response %w", sl.Err(err))
 	} else {
-		rt.log.Info("Response dump", "response", fmt.Sprintf("[%s] %s %s %d\n", time.Now().Format(time.ANSIC), r.Method, r.URL.Host, resp.StatusCode))
+		rt.log.Info("Response dump", "response", string(dumpResponse)) //fmt.Sprintf("[%s] %s %s %d\n", time.Now().Format(time.ANSIC), r.Method, r.URL.Host, resp.StatusCode))
 		//fmt.Sprintf("[%s] %s %s %d\n", time.Now().Format(time.ANSIC), r.Method, r.URL.String(), resp.StatusCode)
 	}
-
-	respDump := ParseResponse(resp)
-	/*if resp.Body != nil {
-		var buf *bytes.Buffer
-		io.Copy(buf, resp.Body)
-		respDump.Body = buf.String()
-	}*/
 	respDump.Raw = string(dumpResponse)
 
 	err = rt.repo.CreateRequest(

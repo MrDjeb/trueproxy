@@ -16,6 +16,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/mrdjeb/trueproxy/internal/api/handlers/request/list"
+	"github.com/mrdjeb/trueproxy/internal/api/handlers/request/one"
 	"github.com/mrdjeb/trueproxy/internal/config"
 	"github.com/mrdjeb/trueproxy/internal/logger"
 	"github.com/mrdjeb/trueproxy/internal/logger/sl"
@@ -43,6 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 	db.AutoMigrate(&models.RequestResponse{})
+
 	repoRequest := storage.NewRequestsRepo(db)
 
 	cm, err := proxy.NewCertManager(cfg.Cert)
@@ -78,8 +80,7 @@ func main() {
 	e.Debug = true
 	e.HideBanner = true
 	e.Server = srvApi
-	///requests – список запросов
-	//requests/id – вывод 1 запроса
+
 	//repeat/id – повторная отправка запроса
 	//scan/id – сканирование запроса)
 
@@ -87,7 +88,8 @@ func main() {
 		return c.String(http.StatusOK, "You <----> TrueProxy <----> Wild Network")
 	})
 
-	e.GET("/requests", list.New(log, repoRequest))
+	e.GET("/requests", list.New(log, repoRequest))   //– список запросов
+	e.GET("/request/:id", one.New(log, repoRequest)) //– вывод 1 запроса
 
 	//- - - - - - - Echo for API - - - - - - -//
 

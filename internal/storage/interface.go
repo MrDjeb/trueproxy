@@ -1,10 +1,18 @@
 package storage
 
-import "github.com/mrdjeb/trueproxy/internal/models"
+import (
+	"errors"
+
+	"github.com/mrdjeb/trueproxy/internal/models"
+)
+
+var (
+	ErrRequestNotFound = errors.New("request not found")
+)
 
 type RequestsRepo interface {
 	CreateRequest(*models.RequestResponse) error
-	ReadRequest(id int) (models.RequestResponse, error)
+	ReadRequest(uint) (models.RequestResponse, error)
 	ReadAllRequest() ([]models.RequestResponse, error)
 }
 

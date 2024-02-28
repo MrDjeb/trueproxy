@@ -18,6 +18,7 @@ import (
 	"github.com/mrdjeb/trueproxy/internal/api/handlers/request/list"
 	"github.com/mrdjeb/trueproxy/internal/api/handlers/request/one"
 	"github.com/mrdjeb/trueproxy/internal/api/handlers/request/repeat"
+	"github.com/mrdjeb/trueproxy/internal/api/handlers/request/scan"
 	"github.com/mrdjeb/trueproxy/internal/config"
 	"github.com/mrdjeb/trueproxy/internal/logger"
 	"github.com/mrdjeb/trueproxy/internal/logger/sl"
@@ -85,8 +86,6 @@ func main() {
 	e.HideBanner = true
 	e.Server = srvApi
 
-	//scan/id – сканирование запроса)
-
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "You <----> TrueProxy <----> Wild Network")
 	})
@@ -94,6 +93,7 @@ func main() {
 	e.GET("/requests", list.New(log, repoRequest))         // – список запросов
 	e.GET("/request/:id", one.New(log, repoRequest))       // – вывод 1 запроса
 	e.GET("/repeat/:id", repeat.New(log, repoRequest, rt)) // – повторная отправка запроса
+	e.GET("/scan/:id", scan.New(log, repoRequest))         // – сканирование запроса
 
 	//- - - - - - - Echo for API - - - - - - -//
 

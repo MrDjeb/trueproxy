@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/mrdjeb/trueproxy/internal/config"
 	"github.com/mrdjeb/trueproxy/internal/logger"
@@ -27,13 +27,20 @@ func main() {
 	)
 	log.Debug("debug messages are enabled")
 
+	cm, err := proxy.NewCertManager(cfg.Cert)
+	if err != nil {
+		log.Error("Faild init cert manager", sl.Err(err))
+		os.Exit(1)
+	}
+
 	srv := http.Server{
-		Handler:           proxy.New(log),
+		Handler:           proxy.New(log, cm),
 		Addr:              cfg.Address,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
 		IdleTimeout:       cfg.IdleTimeout,
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler)), //disable http2
 	}
 
 	quit := make(chan os.Signal, 1)
@@ -50,7 +57,7 @@ func main() {
 	log.Debug("handle quit chanel: ", slog.Any("os.Signal", sig.String()))
 	log.Debug("server stopping...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.GracefulShotdownTimeout)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {

@@ -23,6 +23,14 @@ type proxyRoundTripper struct {
 	repo storage.RequestsRepo
 }
 
+func NewProxyRoundTripper(log *slog.Logger, repo storage.RequestsRepo) *proxyRoundTripper {
+	return &proxyRoundTripper{
+		next: http.DefaultTransport,
+		log:  log,
+		repo: repo,
+	}
+}
+
 func (rt proxyRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 	dumpRequest, err := httputil.DumpRequest(r, true)
 	if err != nil {

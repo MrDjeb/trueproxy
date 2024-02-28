@@ -19,7 +19,7 @@ type RequestGetter interface {
 
 func New(log *slog.Logger, requestGetter RequestGetter) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		const op = "api.request.list.New"
+		const op = "api.request.one.New"
 
 		log = log.With(
 			slog.String("op", op),

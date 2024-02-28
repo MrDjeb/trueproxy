@@ -33,12 +33,8 @@ type ProxyHandler struct {
 	rt          http.RoundTripper
 }
 
-func New(log *slog.Logger, cm *CertManager, repo storage.RequestsRepo) *ProxyHandler {
-	rt := &proxyRoundTripper{
-		next: http.DefaultTransport,
-		log:  log,
-		repo: repo,
-	}
+func NewProxy(log *slog.Logger, cm *CertManager, repo storage.RequestsRepo, rt http.RoundTripper) *ProxyHandler {
+
 	return &ProxyHandler{
 		log: log,
 		cm:  cm,
@@ -176,7 +172,7 @@ func (p *ProxyHandler) handleSingle(inReq *http.Request, proto string) ([]byte, 
 	outReq := inReq.Clone(ctx)
 
 	// for https only
-	changeRequestToTarget(outReq, inReq.Host, proto)
+	ChangeRequestToTarget(outReq, inReq.Host, proto)
 
 	outReq.RequestURI = ""
 	if inReq.ContentLength == 0 {
@@ -215,7 +211,7 @@ func (p *ProxyHandler) handleSingle(inReq *http.Request, proto string) ([]byte, 
 	return httputil.DumpResponse(resp, true)
 }
 
-func changeRequestToTarget(req *http.Request, targetHost string, proto string) error {
+func ChangeRequestToTarget(req *http.Request, targetHost string, proto string) error {
 	if proto != HTTPS {
 		return nil
 	}

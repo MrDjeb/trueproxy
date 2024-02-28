@@ -25,3 +25,4 @@ go.work
 *.bin
 *.tmp
 *.log
+*.db

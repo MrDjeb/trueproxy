@@ -18,19 +18,31 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mrdjeb/trueproxy/internal/logger/sl"
+	"github.com/mrdjeb/trueproxy/internal/storage"
+)
+
+const (
+	HTTPS = "https"
+	HTTP  = "http"
 )
 
 type ProxyHandler struct {
 	log         *slog.Logger
 	TransortTLS *http.Transport
 	cm          *CertManager
+	rt          http.RoundTripper
 }
 
-func New(log *slog.Logger, cm *CertManager) *ProxyHandler {
-
+func New(log *slog.Logger, cm *CertManager, repo storage.RequestsRepo) *ProxyHandler {
+	rt := &proxyRoundTripper{
+		next: http.DefaultTransport,
+		log:  log,
+		repo: repo,
+	}
 	return &ProxyHandler{
 		log: log,
 		cm:  cm,
+		rt:  rt,
 	}
 
 }
@@ -42,11 +54,6 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	p.handleHTTP(w, r)
 }
-
-const (
-	HTTPS = "https"
-	HTTP  = "http"
-)
 
 func (p *ProxyHandler) handleHTTP(respW http.ResponseWriter, inReq *http.Request) {
 	requestID := uuid.New().String()
@@ -71,8 +78,7 @@ func (p *ProxyHandler) handleHTTP(respW http.ResponseWriter, inReq *http.Request
 
 	//- - - - - - - Hijack client - - - - - - -//
 
-	_, responseDump, err := p.handleSingle(inReq, proto)
-
+	responseDump, err := p.handleSingle(inReq, proto)
 	if err != nil {
 		log.Error("handle single error", sl.Err(err))
 		writeRawClientResponse(log, inReq, cleanClientConn, http.StatusBadGateway)
@@ -119,19 +125,39 @@ func (p *ProxyHandler) handleHTTPS(respW http.ResponseWriter, inReq *http.Reques
 	connReader := bufio.NewReader(tlsClientConn)
 
 	r, err := http.ReadRequest(connReader) // only supports HTTP/1.x requests
-	if err == io.EOF {
+	opErr, okOp := err.(*net.OpError)
+	netErr, okNet := err.(net.Error)
+	switch {
+	case err == io.EOF:
 		log.Info("Client close the connection")
 		return
-	} else if errors.Is(err, syscall.ECONNRESET) {
+	case errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNABORTED):
 		log.Error("Client connection reset by peer error", sl.Err(err))
 		return
-	} else if err != nil {
+	case okNet:
+		if !netErr.Timeout() {
+			log.Warn("Client connection force close, tcp", sl.Err(netErr))
+			return
+		} else {
+			log.Error("Read request from client connection error, netERr", sl.Err(netErr))
+			return
+		}
+	case okOp:
+		if opErr.Op == "read" {
+			log.Info("Client read error, tcp")
+			return
+		} else {
+			log.Error("Read request from client connection error, opErr", sl.Err(opErr))
+			return
+		}
+	case err != nil:
 		log.Error("Read request from client connection error", sl.Err(err))
 		return
 	}
+
 	//- - - - - - - Setup TLS - - - - - - -//
 
-	_, responseDump, err := p.handleSingle(r, proto)
+	responseDump, err := p.handleSingle(r, proto)
 	if err != nil {
 		log.Error("handle single error", sl.Err(err))
 		writeRawClientResponse(log, inReq, cleanClientConn, http.StatusBadGateway)
@@ -144,15 +170,7 @@ func (p *ProxyHandler) handleHTTPS(respW http.ResponseWriter, inReq *http.Reques
 	}
 }
 
-func (p *ProxyHandler) handleSingle(
-	inReq *http.Request,
-	proto string,
-) (requestDump, responseDump []byte, err error) {
-
-	requestDump, err = httputil.DumpRequest(inReq, true)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error while dump request %w", err)
-	}
+func (p *ProxyHandler) handleSingle(inReq *http.Request, proto string) ([]byte, error) {
 
 	ctx := inReq.Context()
 	outReq := inReq.Clone(ctx)
@@ -179,10 +197,7 @@ func (p *ProxyHandler) handleSingle(
 	}
 
 	client := http.Client{
-		/*Transport: &proxyRoundTripper{
-			next: http.DefaultTransport,
-			log:  log,
-		},*/
+		Transport: p.rt,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -191,18 +206,13 @@ func (p *ProxyHandler) handleSingle(
 
 	resp, err := client.Do(outReq)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error in client DO: %w", err)
+		return nil, fmt.Errorf("error in client DO: %w", err)
 	}
 	defer resp.Body.Close()
 
 	removeHopByHopHeaders(resp.Header)
 
-	responseDump, err = httputil.DumpResponse(resp, true)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error while dump response: %w", err)
-	}
-
-	return
+	return httputil.DumpResponse(resp, true)
 }
 
 func changeRequestToTarget(req *http.Request, targetHost string, proto string) error {
@@ -259,16 +269,4 @@ func removeHopByHopHeaders(h http.Header) {
 	for _, f := range hopHeaders {
 		h.Del(f)
 	}
-}
-
-type proxyRoundTripper struct {
-	next http.RoundTripper
-	log  *slog.Logger
-}
-
-func (rt proxyRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	//r.Header.Del("Proxy-Connection")
-	resp, err := rt.next.RoundTrip(r)
-
-	return resp, err
 }

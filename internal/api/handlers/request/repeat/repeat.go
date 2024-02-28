@@ -80,7 +80,7 @@ func RepeatRequest(rawRequest []byte, proxyRT http.RoundTripper) ([]byte, error)
 
 	client := http.Client{
 		//Transport: http.DefaultTransport,
-		Transport: proxyRT,
+		Transport: proxyRT, // Save reapet to DB
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

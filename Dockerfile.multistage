@@ -1,0 +1,48 @@
+# =============================================================================
+#  Multi-stage Dockerfile TrueProxy
+# =============================================================================
+#  Usage:
+#    docker build -t trueproxy:local . && docker run --rm trueproxy:local
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+#  Build Stage
+# -----------------------------------------------------------------------------
+FROM golang:1.22.0-alpine3.18 AS builder
+
+ENV CGO_ENABLED=1
+
+RUN apk add --no-cache \
+    # Important: required for go-sqlite3
+    gcc \
+    # Required for Alpine
+    musl-dev
+
+COPY . /github.com/MrDjeb/trueproxy/
+WORKDIR /github.com/MrDjeb/trueproxy/
+
+RUN \
+    go mod download && \
+    go clean --modcache && \
+    go build -ldflags "-s -w -extldflags '-static'" -mod=readonly -o ./.bin cmd/proxy/main.go
+
+
+# -----------------------------------------------------------------------------
+#  Main Stage
+# -----------------------------------------------------------------------------
+FROM scratch AS runner
+
+
+WORKDIR /docker-trueproxy/
+
+COPY --from=builder /github.com/MrDjeb/trueproxy/.bin .
+COPY --from=builder /github.com/MrDjeb/trueproxy/certs certs/
+
+COPY --from=builder /usr/local/go/lib/time/zoneinfo.zip /
+
+ENV TZ="Europe/Moscow"
+ENV ZONEINFO=/zoneinfo.zip
+EXPOSE 62801 62802
+
+ENTRYPOINT ["./.bin"]

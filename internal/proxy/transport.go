@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log/slog"
@@ -42,16 +43,30 @@ func (rt proxyRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 
 	rDump := ParseRequest(r)
 	if r.Body != nil {
-		reader, err := r.GetBody()
+		/*reader, err := r.GetBody()
 		if err != nil {
 			rt.log.Error("error GetBody", sl.Err(err))
+		}*/
+
+		// Check that the server actual sent compressed data
+		var reader io.ReadCloser
+		switch r.Header.Get("Content-Encoding") {
+		case "gzip":
+			reader, err = gzip.NewReader(r.Body)
+			if err != nil {
+				rt.log.Error("error gzip.NewReader", sl.Err(err))
+			}
+			defer reader.Close()
+		default:
+			reader = r.Body
 		}
+
 		bodyRaw, err := io.ReadAll(reader)
 		if err != nil {
 			rt.log.Error("error ReadAll", sl.Err(err))
 		}
 		rDump.Body = string(bodyRaw)
-		reader.Close()
+		//reader.Close()
 	}
 	rDump.Raw = string(dumpRequest)
 
@@ -62,7 +77,20 @@ func (rt proxyRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 
 	respDump := ParseResponse(resp)
 	if resp.Body != nil {
-		b, err := io.ReadAll(resp.Body)
+
+		var reader io.ReadCloser
+		switch resp.Header.Get("Content-Encoding") {
+		case "gzip":
+			reader, err = gzip.NewReader(resp.Body)
+			if err != nil {
+				rt.log.Error("error gzip.NewReader", sl.Err(err))
+			}
+			defer reader.Close()
+		default:
+			reader = resp.Body
+		}
+
+		rawBody, err := io.ReadAll(reader)
 		if err != nil {
 			rt.log.Error("error ReadAll", sl.Err(err))
 		}
@@ -70,11 +98,11 @@ func (rt proxyRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 		if err != nil {
 			rt.log.Error("error resp.Body.Clos", sl.Err(err))
 		}
-		body := io.NopCloser(bytes.NewReader(b))
+		body := io.NopCloser(bytes.NewReader(rawBody))
 		resp.Body = body
-		resp.ContentLength = int64(len(b))
-		resp.Header.Set("Content-Length", strconv.Itoa(len(b)))
-		respDump.Body = string(b)
+		resp.ContentLength = int64(len(rawBody))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(rawBody)))
+		respDump.Body = string(rawBody)
 	}
 
 	dumpResponse, err := httputil.DumpResponse(resp, true)

@@ -12,8 +12,9 @@ curl -X POST -H "Content-Type: application/json" -d '{"productId": 123456, "quan
 
 curl -x localhost:62801 -XPOST -d 'wqefq3fq3fqef' --ssl-no-revoke  https://mail.ru 
 ```
+## API
+- `/requests` – список запросов.
+- `/requests/:id` – вывод 1 запроса.
+- `/repeat/:id` – повторная отправка запроса.
+- `/scan/:id` – сканирование запроса на предмет Command injection.
 
-- requests
-- request/:id
-- repeat/:id
-- scan/:id
